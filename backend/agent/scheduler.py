@@ -6,7 +6,7 @@ from django.db.models import Q
 
 from agent.scraper import fetch_news_articles, fetch_fssai_complaints
 from agent.nlp_extractor import extract_entities
-from agent.risk_scorer import calculate_risk_score
+from agent.risk_scorer import calculate_risk_score_with_explanation
 from core.models import Complaint, RiskScore, LiveAlert
 
 
@@ -108,7 +108,11 @@ def run_pipeline():
                 
                 for food_item in food_items:
                     try:
-                        score = calculate_risk_score(city, food_item)
+                        # Calculate risk with SHAP explanation
+                        result = calculate_risk_score_with_explanation(city, food_item)
+                        score = result['risk_score']
+                        confidence = result['confidence']
+                        shap_explanation = result['shap_explanation']
                         
                         # Update or create RiskScore
                         risk_obj, created = RiskScore.objects.update_or_create(
@@ -117,6 +121,8 @@ def run_pipeline():
                             month=current_month,
                             defaults={
                                 'risk_score': score,
+                                'confidence_score': confidence,
+                                'shap_explanation': shap_explanation or {},
                                 'adulterant': extract_entities(food_item)['adulterant'],
                                 'complaint_count': Complaint.objects.filter(
                                     city__iexact=city,

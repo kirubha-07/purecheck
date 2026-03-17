@@ -22,7 +22,10 @@ class ComplaintSerializer(serializers.ModelSerializer):
 
 
 class RiskScoreSerializer(serializers.ModelSerializer):
-    """Serializer for RiskScore model."""
+    """Serializer for RiskScore model with SHAP explanation."""
+    
+    # Format SHAP explanation for API response
+    shap_explanation = serializers.SerializerMethodField()
     
     class Meta:
         model = RiskScore
@@ -30,13 +33,27 @@ class RiskScoreSerializer(serializers.ModelSerializer):
             'id',
             'city',
             'food_item',
+            'food_category',
             'risk_score',
+            'confidence_score',
             'adulterant',
             'complaint_count',
+            'severity_avg',
             'month',
+            'shap_explanation',
             'last_updated',
         ]
         read_only_fields = ['id', 'last_updated']
+    
+    def get_shap_explanation(self, obj):
+        """Return formatted SHAP explanation."""
+        if isinstance(obj.shap_explanation, dict) and obj.shap_explanation:
+            return {
+                'base_value': obj.shap_explanation.get('base_value', 0),
+                'features': obj.shap_explanation.get('features', []),
+                'model_version': obj.shap_explanation.get('model_version', 'v2')
+            }
+        return None
 
 
 class LiveAlertSerializer(serializers.ModelSerializer):
