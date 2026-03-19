@@ -3,6 +3,8 @@ import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Results from './pages/Results';
 import Report from './pages/Report';
+import HeatMap from './pages/HeatMap';
+import Dashboard from './pages/Dashboard';
 
 export default function App() {
   return (
@@ -13,6 +15,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/results" element={<Results />} />
           <Route path="/report" element={<Report />} />
+          <Route path="/heatmap" element={<HeatMap />} />
+          <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
       </div>
     </Router>
