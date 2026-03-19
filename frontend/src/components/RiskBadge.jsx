@@ -1,29 +1,30 @@
 export default function RiskBadge({ level }) {
-  const getStyles = (level) => {
-    switch (level) {
-      case 'HIGH':
-        return 'bg-red-100 text-red-800 border-red-300';
-      case 'MEDIUM':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'LOW':
-        return 'bg-green-100 text-green-800 border-green-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-300';
-    }
+  const levelMap = {
+    CRITICAL: { color: 'var(--red)', background: 'var(--red-dim)', border: '1px solid var(--red-line)' },
+    HIGH: { color: 'var(--red)', background: 'transparent', border: '1px solid rgba(255, 45, 85, 0.2)' },
+    MEDIUM: { color: 'var(--amber)', background: 'transparent', border: '1px solid rgba(255, 140, 0, 0.2)' },
+    LOW: { color: 'var(--teal)', background: 'transparent', border: '1px solid rgba(0, 200, 150, 0.2)' },
   };
 
-  const getEmoji = (level) => {
-    switch (level) {
-      case 'HIGH': return '🚨';
-      case 'MEDIUM': return '⚠️';
-      case 'LOW': return '✅';
-      default: return '❓';
-    }
-  };
+  const levelStyle = levelMap[level] || levelMap.LOW;
 
   return (
-    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold border ${getStyles(level)}`}>
-      {getEmoji(level)} {level}
+    <span
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '8px',
+        fontWeight: 500,
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        padding: '3px 7px',
+        display: 'inline-block',
+        borderRadius: 0,
+        color: levelStyle.color,
+        background: levelStyle.background,
+        border: levelStyle.border,
+      }}
+    >
+      {level}
     </span>
   );
 }

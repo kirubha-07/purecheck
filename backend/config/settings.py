@@ -63,21 +63,6 @@ DATABASES = {
     }
 }
 
-# PostgreSQL config (for production - requires: psycopg2, created DB, valid credentials)
-# To enable: Set DB_* variables in .env and uncomment below
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.getenv('DB_NAME', 'purecheck_db'),
-#         'USER': os.getenv('DB_USER', 'postgres'),
-#         'PASSWORD': os.getenv('DB_PASSWORD', ''),
-#         'HOST': os.getenv('DB_HOST', 'localhost'),
-#         'PORT': os.getenv('DB_PORT', '5432'),
-#         'CONN_MAX_AGE': 600,
-#         'OPTIONS': {'sslmode': 'prefer'}
-#     }
-# }
-
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},

@@ -1,4 +1,9 @@
 {
+  "r2_score": 0.6114629625165318,
+  "mae": 8.130530287928286,
+  "rmse": 9.845237280079733,
+  "cv_r2_mean": 0.5207801299994361,
+  "cv_r2_std": 0.07962099246830832,
   "feature_names": [
     "complaint_count",
     "severity_avg",
@@ -8,12 +13,9 @@
     "trend_score",
     "adulterant_count"
   ],
-  "data_source": "real",
-  "training_samples": 216,
-  "test_samples": 54,
-  "timestamp": "2026-03-17 19:14:48.479017+00:00",
-  "version": "2.0-shap",
-  "mae": 0.001079135470920139,
-  "rmse": 0.0012123039712570245,
-  "r2": 0.9999999285937391
+  "training_samples": 480,
+  "test_samples": 120,
+  "total_samples": 600,
+  "timestamp": "2026-03-19T11:23:21.888860",
+  "version": "2.0-regularized"
 }

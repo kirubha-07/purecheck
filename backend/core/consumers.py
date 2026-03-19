@@ -18,6 +18,11 @@ class AlertConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
+
+        recent_alerts = await self.get_recent_alerts()
+        for alert in recent_alerts:
+            await self.send(text_data=json.dumps(alert))
+
         print(f"[WebSocket] Client connected to alerts for {self.city}")
     
     async def disconnect(self, close_code):
@@ -46,3 +51,21 @@ class AlertConsumer(AsyncWebsocketConsumer):
         message = event['message']
         
         await self.send(text_data=json.dumps(message))
+
+    @database_sync_to_async
+    def get_recent_alerts(self):
+        alerts = LiveAlert.objects.filter(
+            city__iexact=self.city
+        ).order_by('-created_at')[:5]
+
+        return [
+            {
+                'id': a.id,
+                'city': a.city,
+                'food_item': a.food_item,
+                'risk_level': a.risk_level,
+                'message': a.message,
+                'created_at': a.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            for a in alerts
+        ]

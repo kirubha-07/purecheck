@@ -321,5 +321,22 @@ def calculate_risk_score_with_explanation(city: str, food_item: str) -> Dict:
 
 def calculate_risk_score(city: str, food_item: str) -> float:
     """Legacy helper function - returns only the score."""
-    result = calculate_risk_score_with_explanation(city, food_item)
-    return result['risk_score']
+    scorer = RiskScorerAgent()
+    features = scorer._extract_features(city, food_item)
+
+    feature_vector = [
+        features['complaint_count'],
+        features['severity_avg'],
+        features['season_flag'],
+        features['source_weight'],
+        features['recency_weight'],
+        features.get('trend_score', 0.5),
+        features.get('adulterant_count', 1),
+    ]
+
+    if scorer.model and scorer.scaler:
+        features_scaled = scorer.scaler.transform([feature_vector])
+        risk_score = float(scorer.model.predict(features_scaled)[0])
+        return max(0.0, min(100.0, risk_score))
+
+    return scorer._weighted_formula(features)

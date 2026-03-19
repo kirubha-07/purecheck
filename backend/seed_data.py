@@ -36,26 +36,28 @@ risk_scores = [85, 72, 68, 45, 38, 55, 62]
 for i, city in enumerate(cities):
     for j, food in enumerate(foods):
         risk_score = risk_scores[(i * len(foods) + j) % len(risk_scores)]
-        RiskScore.objects.create(
+        RiskScore.objects.get_or_create(
             city=city,
             food_item=food,
-            risk_score=float(risk_score),
-            adulterant=adulterants[j % len(adulterants)],
-            complaint_count=(i + j) % 10 + 1,
-            month=current_month
+            month=current_month,
+            defaults={
+                'risk_score': float(risk_score),
+                'adulterant': adulterants[j % len(adulterants)],
+                'complaint_count': (i + j) % 10 + 1,
+            }
         )
         print(f"✓ Created risk score: {food} in {city} = {risk_score}")
 
 # Create LiveAlerts
-for i, city in enumerate(cities[:3]):
-    food = foods[i % len(foods)]
-    risk_level = 'HIGH' if i % 2 == 0 else 'MEDIUM'
-    LiveAlert.objects.create(
-        city=city,
-        food_item=food,
-        message=f'{risk_level} RISK: {food} adulteration detected in {city}',
-        risk_level=risk_level
-    )
-    print(f"✓ Created alert: {food} in {city} - {risk_level}")
+for i, city in enumerate(cities):
+    for j, food in enumerate(foods[:2]):
+        risk_level = ['HIGH', 'MEDIUM', 'LOW'][i % 3]
+        LiveAlert.objects.create(
+            city=city,
+            food_item=food,
+            message=f'{risk_level} RISK: {food} adulteration detected in {city}',
+            risk_level=risk_level
+        )
+        print(f"✓ Created alert: {food} in {city} - {risk_level}")
 
 print("\n✅ Dummy data created successfully!")

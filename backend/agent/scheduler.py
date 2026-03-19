@@ -184,6 +184,12 @@ def run_pipeline():
         print("\n" + "="*60)
         print(f"[Scheduler] Pipeline completed successfully at {datetime.now()}")
         print("="*60 + "\n")
+        
+        # Auto-export to CSV for Power BI
+        try:
+            export_to_csv()
+        except Exception as e:
+            print(f"CSV export failed: {e}")
     
     except Exception as e:
         print(f"\n[Scheduler] CRITICAL ERROR: {e}")
@@ -263,3 +269,112 @@ def stop_scheduler():
         scheduler.shutdown()
         scheduler_started = False
         print("[Scheduler] Background scheduler stopped")
+
+
+def export_to_csv():
+    """
+    Exports SQLite data to CSV files for Power BI.
+    Called automatically after each pipeline run.
+    Can also be called manually from Django shell.
+    """
+    import csv
+    
+    # Resolve powerbi folder path
+    base_dir = os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(
+                os.path.abspath(__file__))))
+    powerbi_dir = os.path.join(base_dir, 'powerbi')
+    os.makedirs(powerbi_dir, exist_ok=True)
+
+    # ── Export 1: Risk Scores ─────────────────────
+    risk_path = os.path.join(
+        powerbi_dir, 'purecheck_live.csv')
+    
+    exported_risk = 0
+    with open(risk_path, 'w', newline='',
+              encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            'city', 'state', 'food_item',
+            'risk_score', 'confidence',
+            'adulterant', 'complaint_count',
+            'risk_level', 'month', 'last_updated'
+        ])
+        for rs in RiskScore.objects.all().order_by(
+                '-risk_score'):
+            if float(rs.risk_score or 0) > 70:
+                level = 'HIGH'
+            elif float(rs.risk_score or 0) > 40:
+                level = 'MEDIUM'
+            else:
+                level = 'LOW'
+            
+            writer.writerow([
+                rs.city or '',
+                getattr(rs, 'state', 'India'),
+                rs.food_item or '',
+                round(float(rs.risk_score or 0), 2),
+                round(float(
+                    rs.confidence_score
+                    if hasattr(rs, 'confidence_score')
+                    and rs.confidence_score
+                    else 0.85), 2),
+                rs.adulterant or 'unknown',
+                rs.complaint_count or 0,
+                level,
+                rs.month or datetime.now().strftime(
+                    '%Y-%m'),
+                rs.last_updated.strftime('%Y-%m-%d')
+                if rs.last_updated else
+                datetime.now().strftime('%Y-%m-%d')
+            ])
+            exported_risk += 1
+
+    # ── Export 2: Complaints ──────────────────────
+    complaints_path = os.path.join(
+        powerbi_dir, 'purecheck_complaints.csv')
+    
+    exported_complaints = 0
+    with open(complaints_path, 'w', newline='',
+              encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            'source', 'city', 'state',
+            'food_item', 'adulterant',
+            'severity', 'created_date', 'month'
+        ])
+        for c in Complaint.objects.all().order_by(
+                '-created_at'):
+            writer.writerow([
+                c.source or 'UNKNOWN',
+                c.city or '',
+                getattr(c, 'state', 'India'),
+                c.food_item or '',
+                c.adulterant or 'unknown',
+                c.severity or 1,
+                c.created_at.strftime('%Y-%m-%d')
+                if c.created_at else
+                datetime.now().strftime('%Y-%m-%d'),
+                c.created_at.strftime('%Y-%m')
+                if c.created_at else
+                datetime.now().strftime('%Y-%m')
+            ])
+            exported_complaints += 1
+
+    print(f"\n{'='*50}")
+    print(f"✅ CSV Export Complete")
+    print(f"{'='*50}")
+    print(f"Risk scores exported : {exported_risk}")
+    print(f"Complaints exported  : {exported_complaints}")
+    print(f"Location: {powerbi_dir}")
+    print(f"Files:")
+    print(f"  → purecheck_live.csv")
+    print(f"  → purecheck_complaints.csv")
+    print(f"{'='*50}\n")
+    
+    return {
+        'risk_rows': exported_risk,
+        'complaint_rows': exported_complaints,
+        'path': powerbi_dir
+    }

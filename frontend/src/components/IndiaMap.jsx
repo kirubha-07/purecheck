@@ -1,120 +1,143 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
-import L from 'leaflet';
+import { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import api from '../api/axios';
+import { getHeatmapData } from '../api/axios';
 
-export default function IndiaMap() {
+function MapHoverHandler() {
+  const map = useMapEvents({});
+  const markerRefs = useRef({});
+
+  return null;
+}
+
+export default function IndiaMap({ height = '100%', zoom = 5 }) {
   const [cities, setCities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchHeatmapData = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get('/heatmap/');
-        setCities(response.data.data || []);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching heatmap data:', err);
-        setError('Failed to load heatmap data');
-        setCities([]);
-      } finally {
-        setLoading(false);
+    const fetch = async () => {
+      const { data, error } = await getHeatmapData();
+      if (!error && data && data.data) {
+        setCities(data.data || []);
       }
+      setLoading(false);
     };
-
-    fetchHeatmapData();
+    fetch();
   }, []);
 
-  // Determine color based on risk score
-  const getColor = (riskScore) => {
-    if (riskScore >= 70) return '#dc2626'; // Red
-    if (riskScore >= 40) return '#f97316'; // Orange
-    return '#16a34a'; // Green
+  const getRiskColor = (riskScore) => {
+    if (riskScore > 70) return 'var(--red)';
+    if (riskScore >= 40) return 'var(--amber)';
+    return 'var(--teal)';
   };
 
-  // Determine marker size based on risk score
   const getRadius = (riskScore) => {
-    return Math.max(5, Math.min(20, riskScore / 5));
+    return Math.max(4, Math.min(14, riskScore / 9));
   };
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="text-gray-600">
-          <div className="animate-spin mb-4">⟳</div>
-          <p>Loading risk map...</p>
-        </div>
+      <div style={{ width: '100%', height: '100%', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="skeleton" style={{ width: '200px', height: '40px' }} />
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-        <div className="text-red-600 text-center">
-          <p className="text-lg font-semibold mb-2">⚠️ Error</p>
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
+  const colors = {
+    red: '#FF2D55',
+    amber: '#FF8C00',
+    teal: '#00C896',
+  };
+
+  const getColorHex = (riskScore) => {
+    if (riskScore > 70) return colors.red;
+    if (riskScore >= 40) return colors.amber;
+    return colors.teal;
+  };
 
   return (
-    <div className="w-full h-full">
-      <MapContainer
-        center={[20.5937, 78.9629]}
-        zoom={5}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; OpenStreetMap contributors'
-        />
+    <MapContainer
+      center={[20.5937, 78.9629]}
+      zoom={zoom || 5}
+      minZoom={4}
+      maxZoom={8}
+      style={{ width: '100%', height }}
+    >
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution="© CartoDB"
+      />
 
-        {cities.map((city) => (
+      {cities.map((city, idx) => {
+        const color = getColorHex(city.risk_score);
+        const radius = getRadius(city.risk_score);
+
+        return (
           <CircleMarker
-            key={city.city}
+            key={`${city.city}-${idx}`}
             center={[city.lat, city.lng]}
-            radius={getRadius(city.risk_score)}
-            fillColor={getColor(city.risk_score)}
-            color={getColor(city.risk_score)}
-            weight={2}
-            opacity={0.8}
-            fillOpacity={0.7}
+            radius={radius}
+            fillColor={color}
+            color={color}
+            weight={0}
+            opacity={0.85}
+            fillOpacity={0.85}
+            eventHandlers={{
+              mouseover: (e) => {
+                e.target.setStyle({ weight: 1 });
+              },
+              mouseout: (e) => {
+                e.target.setStyle({ weight: 0 });
+              },
+            }}
           >
             <Popup>
-              <div className="text-sm">
-                <p className="font-bold text-gray-800">{city.city}</p>
-                <p className="text-gray-600">{city.state}</p>
-                <div className="my-2 border-t border-gray-300 pt-2">
-                  <p className="text-sm">
-                    <span className="font-semibold">Risk Score:</span> {city.risk_score.toFixed(1)}
-                  </p>
-                  <p className="text-sm">
-                    <span className="font-semibold">Confidence:</span> {(city.confidence * 100).toFixed(0)}%
-                  </p>
-                  {city.top_food && (
-                    <p className="text-sm">
-                      <span className="font-semibold">Top Risk:</span> {city.top_food}
-                    </p>
-                  )}
-                  {city.top_adulterant && (
-                    <p className="text-sm">
-                      <span className="font-semibold">Adulterant:</span> {city.top_adulterant}
-                    </p>
-                  )}
-                  <p className="text-sm">
-                    <span className="font-semibold">Complaints:</span> {city.complaint_count}
-                  </p>
+              <div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '16px',
+                    color: 'var(--text)',
+                    marginBottom: '6px',
+                  }}
+                >
+                  {city.city}
+                </div>
+
+                <div style={{ fontSize: '9px', color: 'var(--text-3)', marginBottom: '8px' }}>
+                  {city.state}
+                </div>
+
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '22px',
+                    color: color,
+                    marginBottom: '4px',
+                  }}
+                >
+                  {city.risk_score.toFixed(0)}
+                </div>
+
+                <div style={{ fontSize: '9px', color: 'var(--text-3)', marginTop: '8px' }}>
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '9px',
+                      letterSpacing: '1px',
+                      textTransform: 'uppercase',
+                      marginBottom: '3px',
+                    }}
+                  >
+                    LAST UPDATED
+                  </div>
+                  {city.updated_at ? new Date(city.updated_at).toLocaleString() : '6 hours ago'}
                 </div>
               </div>
             </Popup>
           </CircleMarker>
-        ))}
-      </MapContainer>
-    </div>
+        );
+      })}
+    </MapContainer>
   );
 }
