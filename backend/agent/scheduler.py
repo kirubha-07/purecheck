@@ -63,6 +63,7 @@ def run_pipeline():
                         food_item=entities['food_item'],
                         adulterant=entities['adulterant'],
                         severity=entities['severity'],
+                        nlp_confidence=entities.get('nlp_confidence', 0.5),
                         raw_text=article.get('description', article.get('title', ''))[:1000]
                     )
                     new_complaints.append(complaint)
@@ -71,11 +72,17 @@ def run_pipeline():
         
         for complaint_data in fssai_complaints:
             try:
+                # Extract entities from FSSAI complaint text
+                entities = extract_entities(complaint_data.get('raw_text', ''))
+                
                 if not Complaint.objects.filter(
                     city__iexact=complaint_data['city'],
                     food_item__iexact=complaint_data['food_item'],
                     created_at__gte=timezone.now() - timezone.timedelta(hours=6)
                 ).exists():
+                    
+                    # Get NLP confidence from entity extraction
+                    nlp_conf = entities.get('nlp_confidence', 0.8)  # FSSAI data is generally high confidence
                     
                     complaint = Complaint.objects.create(
                         source='FSSAI',
@@ -84,6 +91,7 @@ def run_pipeline():
                         food_item=complaint_data['food_item'],
                         adulterant=complaint_data['adulterant'],
                         severity=complaint_data['severity'],
+                        nlp_confidence=nlp_conf,
                         raw_text=complaint_data['raw_text']
                     )
                     new_complaints.append(complaint)
@@ -144,7 +152,7 @@ def run_pipeline():
                             )
                             if alert_created:
                                 alerts_created += 1
-                                print(f"[Pipeline] 🚨 HIGH RISK ALERT: {food_item} in {city} ({score:.1f})")
+                                print(f"[Pipeline] [HIGH RISK ALERT] {food_item} in {city} ({score:.1f})")
                                 
                                 # Send to WebSocket
                                 try:

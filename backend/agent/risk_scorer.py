@@ -40,7 +40,7 @@ class RiskScorerAgent:
             if os.path.exists(model_path):
                 with open(model_path, 'rb') as f:
                     model = pickle.load(f)
-                print("[RiskScorer] ✓ Loaded XGBoost model")
+                print("[RiskScorer] [OK] Loaded XGBoost model")
                 return model
         except Exception as e:
             print(f"[RiskScorer] Could not load model: {e}")
@@ -60,7 +60,7 @@ class RiskScorerAgent:
             if os.path.exists(scaler_path):
                 with open(scaler_path, 'rb') as f:
                     scaler = pickle.load(f)
-                print("[RiskScorer] ✓ Loaded feature scaler")
+                print("[RiskScorer] [OK] Loaded feature scaler")
                 return scaler
         except Exception as e:
             print(f"[RiskScorer] Could not load scaler: {e}")
@@ -80,7 +80,7 @@ class RiskScorerAgent:
             if os.path.exists(explainer_path):
                 with open(explainer_path, 'rb') as f:
                     explainer = pickle.load(f)
-                print("[RiskScorer] ✓ Loaded SHAP explainer")
+                print("[RiskScorer] [OK] Loaded SHAP explainer")
                 return explainer
         except Exception as e:
             print(f"[RiskScorer] Could not load SHAP explainer: {e}")
@@ -100,7 +100,7 @@ class RiskScorerAgent:
             if os.path.exists(metadata_path):
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
-                print("[RiskScorer] ✓ Loaded model metadata")
+                print("[RiskScorer] [OK] Loaded model metadata")
                 return metadata
         except Exception as e:
             print(f"[RiskScorer] Could not load metadata: {e}")

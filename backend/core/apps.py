@@ -7,8 +7,9 @@ class CoreConfig(AppConfig):
     
     def ready(self):
         """Start the scheduler when Django app is ready."""
-        try:
-            from agent.scheduler import start_scheduler
-            start_scheduler()
-        except Exception as e:
-            print(f"Warning: Could not start scheduler: {e}")
+        # Disabled automatic startup for now - use management command instead
+        # try:
+        #     from agent.scheduler import start_scheduler
+        #     start_scheduler()
+        # except Exception as e:
+        #     print(f"Warning: Could not start scheduler: {e}")
