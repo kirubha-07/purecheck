@@ -149,3 +149,162 @@ def cities_endpoint(request):
             {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+def risk_explain_endpoint(request):
+    """
+    GET /api/risk/explain/?city=Trichy&food=milk
+    Returns full SHAP explanation for one food item.
+    Response: {
+        food_item: "milk",
+        risk_score: 84.2,
+        confidence: 91.3,
+        explanation: "Human-readable explanation",
+        shap_values: { ... },
+        top_factor: "complaint_count"
+    }
+    """
+    try:
+        city = request.query_params.get('city', '').strip()
+        food = request.query_params.get('food', '').strip()
+        
+        if not city or not food:
+            return Response(
+                {'error': 'city and food parameters are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get current month
+        now = timezone.now()
+        current_month = now.strftime('%Y-%m')
+        
+        # Fetch risk score
+        try:
+            risk_score = RiskScore.objects.get(
+                city__iexact=city,
+                food_item__iexact=food,
+                month=current_month
+            )
+        except RiskScore.DoesNotExist:
+            return Response(
+                {'error': f'No risk data found for {food} in {city}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Extract explanation from SHAP values
+        shap_vals = risk_score.shap_explanation or {}
+        explanation_text = f"Risk is primarily driven by "
+        
+        if shap_vals:
+            top_factors = sorted(
+                shap_vals.items(),
+                key=lambda x: abs(x[1]),
+                reverse=True
+            )[:3]
+            
+            factors_text = " and ".join([
+                f"{factor[0]} ({factor[1]:+.2f})"
+                for factor in top_factors
+            ])
+            explanation_text += factors_text
+        else:
+            explanation_text += "recent complaints and severity patterns"
+        
+        explanation_text += f". Confidence level: {risk_score.confidence_score:.1f}%"
+        
+        return Response(
+            {
+                'food_item': risk_score.food_item,
+                'city': risk_score.city,
+                'risk_score': risk_score.risk_score,
+                'confidence': risk_score.confidence_score,
+                'adulterant': risk_score.adulterant,
+                'complaint_count': risk_score.complaint_count,
+                'explanation': explanation_text,
+                'shap_values': shap_vals,
+                'top_factor': max(
+                    shap_vals.items(),
+                    key=lambda x: abs(x[1]),
+                    default=('N/A', 0)
+                )[0] if shap_vals else 'N/A'
+            },
+            status=status.HTTP_200_OK
+        )
+    
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def heatmap_endpoint(request):
+    """
+    GET /api/heatmap/
+    Returns risk scores for ALL cities in DB with coordinates.
+    Response: list of {
+        city, lat, lng, risk_score,
+        top_food, top_adulterant, state
+    }
+    Used by IndiaMap.jsx to render Leaflet heatmap.
+    """
+    try:
+        from core.city_coordinates import get_coordinates
+        
+        # Get current month
+        now = timezone.now()
+        current_month = now.strftime('%Y-%m')
+        
+        # Get distinct cities and their highest risk scores
+        cities_data = []
+        cities_processed = set()
+        
+        risk_scores = RiskScore.objects.filter(
+            month=current_month
+        ).order_by('-risk_score')
+        
+        for risk_score in risk_scores:
+            city = risk_score.city
+            
+            # Skip if we've already added this city
+            if city.lower() in cities_processed:
+                continue
+            
+            cities_processed.add(city.lower())
+            
+            # Get coordinates
+            coords = get_coordinates(city)
+            if not coords:
+                continue
+            
+            cities_data.append({
+                'city': city,
+                'state': coords.get('state', 'Unknown'),
+                'lat': coords['lat'],
+                'lng': coords['lng'],
+                'risk_score': risk_score.risk_score,
+                'confidence': risk_score.confidence_score,
+                'top_food': risk_score.food_item,
+                'top_adulterant': risk_score.adulterant,
+                'complaint_count': risk_score.complaint_count
+            })
+        
+        # Sort by risk score descending
+        cities_data.sort(key=lambda x: x['risk_score'], reverse=True)
+        
+        return Response(
+            {
+                'total_cities': len(cities_data),
+                'data': cities_data,
+                'last_updated': now.isoformat()
+            },
+            status=status.HTTP_200_OK
+        )
+    
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

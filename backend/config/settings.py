@@ -63,7 +63,8 @@ DATABASES = {
     }
 }
 
-# PostgreSQL config (uncomment to use PostgreSQL instead of SQLite)
+# PostgreSQL config (for production - requires: psycopg2, created DB, valid credentials)
+# To enable: Set DB_* variables in .env and uncomment below
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.postgresql',
@@ -72,6 +73,8 @@ DATABASES = {
 #         'PASSWORD': os.getenv('DB_PASSWORD', ''),
 #         'HOST': os.getenv('DB_HOST', 'localhost'),
 #         'PORT': os.getenv('DB_PORT', '5432'),
+#         'CONN_MAX_AGE': 600,
+#         'OPTIONS': {'sslmode': 'prefer'}
 #     }
 # }
 
