@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { getTopRisks, getRiskExplanation, getAlerts } from '../api/axios';
+import { getTopRisks, getRiskExplanation, getAlerts, getMlStatus } from '../api/axios';
 import LiveFeed from '../components/LiveFeed';
 import IndiaMap from '../components/IndiaMap';
 
@@ -16,6 +16,8 @@ export default function Results() {
   const [shapData, setShapData] = useState({});
   const [shapLoading, setShapLoading] = useState({});
   const [shapError, setShapError] = useState({});
+  const [mlStatus, setMlStatus] = useState(null);
+  const [noDataMessage, setNoDataMessage] = useState('No data yet. Running pipeline...');
 
   useEffect(() => {
     if (!city) {
@@ -27,9 +29,17 @@ export default function Results() {
       setLoading(true);
       const { data: risksData } = await getTopRisks(city);
       const { data: alertsData } = await getAlerts(city);
+      const { data: mlStatusData } = await getMlStatus();
 
-      setRisks(risksData || []);
+      if (Array.isArray(risksData)) {
+        setRisks(risksData);
+        setNoDataMessage('No data yet. Running pipeline...');
+      } else {
+        setRisks(risksData?.data || []);
+        setNoDataMessage(risksData?.message || 'No data yet. Running pipeline...');
+      }
       setAlerts(alertsData || []);
+      setMlStatus(mlStatusData || null);
       setLoading(false);
     };
 
@@ -125,9 +135,18 @@ export default function Results() {
                   fontSize: '10px',
                   color: 'var(--text-3)',
                   letterSpacing: '1px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
               >
-                Tamil Nadu · Updated 6 hours ago
+                <span>Tamil Nadu · Updated near real-time</span>
+                <span style={{ border: '1px solid var(--line-2)', padding: '2px 6px', color: mlStatus?.mode === 'ML' ? 'var(--teal)' : 'var(--amber)' }}>
+                  {mlStatus?.mode || 'FALLBACK'}
+                </span>
+                <span style={{ border: '1px solid var(--line-2)', padding: '2px 6px' }}>
+                  {mlStatus?.data_mode || 'SIMULATED'}
+                </span>
               </div>
             </div>
 
@@ -266,16 +285,51 @@ export default function Results() {
                               }}
                             >
                               <span className="label">PREDICTION BREAKDOWN</span>
-                              <div
-                                style={{
-                                  fontFamily: 'var(--font-mono)',
-                                  fontSize: '9px',
-                                  color: 'var(--teal)',
-                                  border: '1px solid rgba(0, 200, 150, 0.25)',
-                                  padding: '2px 8px',
-                                }}
-                              >
-                                {Math.round(shapData[idx]?.confidence ?? 85)}% CONFIDENT
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <div
+                                  style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '9px',
+                                    color: 'var(--amber)',
+                                    border: '1px solid rgba(255, 140, 0, 0.35)',
+                                    padding: '2px 8px',
+                                  }}
+                                >
+                                  SCORE {Math.round(shapData[idx]?.risk_score ?? risk.risk_score ?? 0)}
+                                </div>
+                                <div
+                                  style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '9px',
+                                    color: 'var(--teal)',
+                                    border: '1px solid rgba(0, 200, 150, 0.25)',
+                                    padding: '2px 8px',
+                                  }}
+                                >
+                                  {Math.round(shapData[idx]?.confidence ?? 85)}% CONFIDENT
+                                </div>
+                                <div
+                                  style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '9px',
+                                    color: 'var(--text-2)',
+                                    border: '1px solid var(--line-2)',
+                                    padding: '2px 8px',
+                                  }}
+                                >
+                                  {(shapData[idx]?.explanation_source || 'RULE_BASED').toUpperCase()}
+                                </div>
+                                <div
+                                  style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '9px',
+                                    color: 'var(--text-2)',
+                                    border: '1px solid var(--line-2)',
+                                    padding: '2px 8px',
+                                  }}
+                                >
+                                  {(shapData[idx]?.score_source || risk.score_source || 'RULE_ONLY').toUpperCase()}
+                                </div>
                               </div>
                             </div>
 
@@ -289,7 +343,7 @@ export default function Results() {
                                 // explanation unavailable
                               </div>
                             ) : (() => {
-                              const features = shapData[idx]?.shap_data?.features || [];
+                              const features = shapData[idx]?.shap_data?.features || shapData[idx]?.shap_data?.top_factors || shapData[idx]?.factors || [];
 
                               if (features.length === 0) {
                                 return (
@@ -365,6 +419,18 @@ export default function Results() {
                             >
                               {shapData[idx]?.explanation_text || 'This food item shows elevated risk primarily due to recent complaints and adulterant patterns.'}
                             </div>
+
+                            <div
+                              style={{
+                                marginTop: '10px',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '9px',
+                                color: 'var(--text-3)',
+                                letterSpacing: '1px',
+                              }}
+                            >
+                              DATA SOURCE: {(shapData[idx]?.data_source_type || risk.data_source_type || mlStatus?.data_mode || 'SIMULATED').toUpperCase()}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -378,7 +444,7 @@ export default function Results() {
           {/* No data state */}
           {!loading && risks.length === 0 && (
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-4)', padding: '40px 0', textAlign: 'center' }}>
-              // no data returned for this city
+              // {noDataMessage}
             </div>
           )}
 

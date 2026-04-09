@@ -1,14 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
+import { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getHeatmapData } from '../api/axios';
-
-function MapHoverHandler() {
-  const map = useMapEvents({});
-  const markerRefs = useRef({});
-
-  return null;
-}
 
 export default function IndiaMap({ height = '100%', zoom = 5 }) {
   const [cities, setCities] = useState([]);
@@ -24,12 +17,6 @@ export default function IndiaMap({ height = '100%', zoom = 5 }) {
     };
     fetch();
   }, []);
-
-  const getRiskColor = (riskScore) => {
-    if (riskScore > 70) return 'var(--red)';
-    if (riskScore >= 40) return 'var(--amber)';
-    return 'var(--teal)';
-  };
 
   const getRadius = (riskScore) => {
     return Math.max(4, Math.min(14, riskScore / 9));

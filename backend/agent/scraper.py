@@ -1,8 +1,12 @@
 import os
+import logging
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import List, Dict
+from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class NewsScraperAgent:
@@ -25,7 +29,7 @@ class NewsScraperAgent:
         """
         try:
             if not self.news_api_key or self.news_api_key == 'your_newsapi_key_here':
-                print(f"[Scraper] No NewsAPI key available, returning dummy data for {city}")
+                logger.info("[Scraper] No NewsAPI key available, using structured dummy data for %s", city)
                 return self._get_dummy_articles(city)
             
             query = f"food adulteration {city} India"
@@ -49,17 +53,20 @@ class NewsScraperAgent:
                     'description': article.get('description', ''),
                     'url': article.get('url', ''),
                     'publishedAt': article.get('publishedAt', ''),
-                    'source': 'NEWS'
+                    'timestamp': article.get('publishedAt', datetime.now().isoformat()),
+                    'source_url': article.get('url', ''),
+                    'source': 'NEWS',
+                    'data_source_type': 'REAL' if settings.DATA_MODE == 'REAL' else 'SIMULATED',
                 })
             
-            print(f"[Scraper] Fetched {len(articles)} news articles for {city}")
+            logger.info("[Scraper] Fetched %s news articles for %s", len(articles), city)
             return articles
         
         except requests.exceptions.RequestException as e:
-            print(f"[Scraper] Error fetching news for {city}: {e}")
+            logger.warning("[Scraper] Error fetching news for %s: %s", city, e)
             return self._get_dummy_articles(city)
         except Exception as e:
-            print(f"[Scraper] Unexpected error: {e}")
+            logger.warning("[Scraper] Unexpected error for %s: %s", city, e)
             return self._get_dummy_articles(city)
     
     def fetch_fssai_complaints(self) -> List[Dict]:
@@ -70,21 +77,8 @@ class NewsScraperAgent:
         Returns:
             List of complaint dicts with keys: city, food_item, adulterant, severity, raw_text
         """
-        try:
-            url = 'https://foscos.fssai.gov.in'
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Since FSSAI site structure may vary, we use a basic approach
-            # In production, implement proper scraping logic specific to FSSAI portal
-            print("[Scraper] FSSAI portal fetch successful")
-            return self._get_dummy_fssai_complaints()
-        
-        except Exception as e:
-            print(f"[Scraper] Could not fetch FSSAI complaints: {e}. Using fallback data.")
-            return self._get_dummy_fssai_complaints()
+        logger.info("[Scraper] Using structured FSSAI mock complaints")
+        return self._get_dummy_fssai_complaints()
     
     def _get_dummy_articles(self, city: str) -> List[Dict]:
         """Return dummy news articles for testing."""
@@ -94,14 +88,30 @@ class NewsScraperAgent:
                 'description': f'Recent complaints about milk adulteration with detergent in {city}',
                 'url': 'https://example.com/article1',
                 'publishedAt': datetime.now().isoformat(),
-                'source': 'NEWS'
+                'timestamp': datetime.now().isoformat(),
+                'source_url': 'https://example.com/article1',
+                'source': 'NEWS',
+                'data_source_type': 'SIMULATED',
+                'city': city,
+                'food': 'milk',
+                'adulterant': 'detergent',
+                'issue': 'detergent residue found in milk samples',
+                'severity': 4,
             },
             {
                 'title': f'Health Department warns about synthetic colors in sweets in {city}',
                 'description': f'Local authorities warn consumers about synthetic colors found in traditional sweets',
                 'url': 'https://example.com/article2',
                 'publishedAt': datetime.now().isoformat(),
-                'source': 'NEWS'
+                'timestamp': datetime.now().isoformat(),
+                'source_url': 'https://example.com/article2',
+                'source': 'NEWS',
+                'data_source_type': 'SIMULATED',
+                'city': city,
+                'food': 'sweets',
+                'adulterant': 'synthetic color',
+                'issue': 'synthetic colors detected in sweets',
+                'severity': 3,
             },
         ]
     
@@ -110,16 +120,24 @@ class NewsScraperAgent:
         return [
             {
                 'city': 'Trichy',
-                'food_item': 'milk',
+                'food': 'milk',
                 'adulterant': 'detergent',
+                'issue': 'detergent residue in milk sample',
                 'severity': 4,
+                'timestamp': datetime.now().isoformat(),
+                'source_url': 'https://fssai.gov.in/mock/trichy-milk',
+                'data_source_type': 'SIMULATED',
                 'raw_text': 'Milk sample from local dairy tested positive for detergent residue'
             },
             {
                 'city': 'Coimbatore',
-                'food_item': 'turmeric',
+                'food': 'turmeric',
                 'adulterant': 'lead chromate',
+                'issue': 'lead chromate found in turmeric powder',
                 'severity': 5,
+                'timestamp': datetime.now().isoformat(),
+                'source_url': 'https://fssai.gov.in/mock/coimbatore-turmeric',
+                'data_source_type': 'SIMULATED',
                 'raw_text': 'High levels of lead chromate found in turmeric powder'
             },
         ]

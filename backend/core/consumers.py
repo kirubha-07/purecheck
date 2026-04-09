@@ -1,7 +1,12 @@
 import json
+import logging
+from urllib.parse import unquote
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from core.models import LiveAlert
+
+
+logger = logging.getLogger(__name__)
 
 
 class AlertConsumer(AsyncWebsocketConsumer):
@@ -9,7 +14,7 @@ class AlertConsumer(AsyncWebsocketConsumer):
     
     async def connect(self):
         """Handle WebSocket connection."""
-        self.city = self.scope['url_route']['kwargs']['city'].lower()
+        self.city = unquote(self.scope['url_route']['kwargs']['city']).strip().lower()
         self.room_group_name = f'alerts_{self.city}'
         
         # Join room group
@@ -23,7 +28,7 @@ class AlertConsumer(AsyncWebsocketConsumer):
         for alert in recent_alerts:
             await self.send(text_data=json.dumps(alert))
 
-        print(f"[WebSocket] Client connected to alerts for {self.city}")
+        logger.info("[WebSocket] Client connected to alerts for %s", self.city)
     
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
@@ -31,7 +36,7 @@ class AlertConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             self.channel_name
         )
-        print(f"[WebSocket] Client disconnected from alerts for {self.city}")
+        logger.info("[WebSocket] Client disconnected from alerts for %s", self.city)
     
     async def receive(self, text_data):
         """Handle incoming WebSocket message."""

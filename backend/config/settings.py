@@ -1,10 +1,13 @@
 import os
+import logging
+import socket
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+logger = logging.getLogger(__name__)
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-purecheck-dev-key-change-in-production')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
@@ -59,7 +62,7 @@ ASGI_APPLICATION = 'config.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -95,14 +98,49 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
 ]
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^http://localhost:\d+$',
+    r'^http://127\.0\.0\.1:\d+$',
+]
+
+redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+redis_port = int(os.getenv('REDIS_PORT', '6379'))
+
+
+def _is_redis_available(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+if _is_redis_available(redis_host, redis_port):
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [(redis_host, redis_port)],
+            },
+        },
     }
-}
+    logger.info('Using Redis channel layer for real-time messaging')
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer'
+        }
+    }
+    logger.warning(
+        'Redis unavailable at %s:%s. Falling back to InMemoryChannelLayer.',
+        redis_host,
+        redis_port,
+    )
 
 LOGGING = {
     'version': 1,
@@ -117,3 +155,10 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# Runtime transparency and near-real-time pipeline tuning
+DATA_MODE = os.getenv('DATA_MODE', 'SIMULATED').upper()
+if DATA_MODE not in {'REAL', 'SIMULATED'}:
+    DATA_MODE = 'SIMULATED'
+
+PIPELINE_INTERVAL_MINUTES = int(os.getenv('PIPELINE_INTERVAL_MINUTES', '5'))

@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.conf import settings
 from agent.scheduler import run_pipeline
 
 
@@ -20,7 +21,7 @@ class Command(BaseCommand):
         else:
             # Start the scheduler
             from agent.scheduler import start_scheduler
-            self.stdout.write(self.style.SUCCESS('Starting background scheduler (runs every 6 hours)...'))
+            self.stdout.write(self.style.SUCCESS(f'Starting background scheduler (runs every {settings.PIPELINE_INTERVAL_MINUTES} minutes)...'))
             try:
                 start_scheduler()
                 # Keep the process alive

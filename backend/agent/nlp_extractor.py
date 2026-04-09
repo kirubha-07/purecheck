@@ -1,5 +1,6 @@
 import re
 import warnings
+import logging
 from typing import Dict, Tuple
 warnings.filterwarnings('ignore')
 
@@ -12,6 +13,7 @@ except ImportError:
 # Global flag to prevent repeated failed BERT initialization attempts
 _BERT_INIT_ATTEMPTED = False
 _BERT_AVAILABLE = False
+logger = logging.getLogger(__name__)
 
 class NLPExtractor:
     """
@@ -63,26 +65,30 @@ class NLPExtractor:
             return False
         
         try:
-            # Use lightweight DistilBERT instead of BART (much faster, less memory)
-            # Note: Requires internet for first download, then caches locally
-            self.bert_pipelines['zero_shot'] = pipeline(
+            self.bert_pipelines['classifier'] = pipeline(
                 "zero-shot-classification",
-                model="distilbert-base-multilingual-uncased",  # Multilingual, ~300MB
-                device=-1  # CPU only for compatibility
+                model="facebook/bart-large-mnli",
+                device=-1
             )
-            
-            # Sentiment analysis for severity estimation
+
+            self.bert_pipelines['ner'] = pipeline(
+                "ner",
+                model="dslim/bert-base-NER",
+                aggregation_strategy="simple",
+                device=-1,
+            )
+
             self.bert_pipelines['sentiment'] = pipeline(
                 "sentiment-analysis",
                 model="distilbert-base-uncased-finetuned-sst-2-english",
                 device=-1
             )
             
-            print("[NLPExtractor] [OK] BERT pipelines initialized successfully")
+            logger.info("[NLPExtractor] BERT pipelines initialized successfully")
             return True
         except Exception as e:
-            print(f"[NLPExtractor] Warning: Could not initialize BERT: {e}")
-            print("[NLPExtractor] Falling back to keyword-based extraction")
+            logger.warning("[NLPExtractor] Could not initialize BERT pipelines: %s", e)
+            logger.warning("[NLPExtractor] Falling back to keyword-based extraction")
             return False
     
     def extract_entities(self, text: str) -> Dict:
@@ -97,18 +103,24 @@ class NLPExtractor:
         """
         text_lower = text.lower()
         
-        # Extract city (using regex/keyword matching - more reliable)
-        city = self._extract_city(text_lower)
+        # Extract city via NER first, then keyword fallback
+        city = self._extract_city_ner(text) if 'ner' in self.bert_pipelines else None
+        if not city:
+            city = self._extract_city(text_lower)
         
         # Extract food item using BERT if available
-        if 'zero_shot' in self.bert_pipelines:
+        if 'classifier' in self.bert_pipelines:
+            logger.info("NLP transformer used")
+            nlp_mode = 'TRANSFORMER'
             food_item, food_confidence = self._extract_food_bert(text)
         else:
+            logger.warning("Keyword fallback used")
+            nlp_mode = 'KEYWORD'
             food_item = self._extract_food_keyword(text_lower)
             food_confidence = 0.5
         
         # Extract adulterant using BERT if available
-        if 'zero_shot' in self.bert_pipelines:
+        if 'classifier' in self.bert_pipelines:
             adulterant, adulterant_confidence = self._extract_adulterant_bert(text)
         else:
             adulterant = self._extract_adulterant_keyword(text_lower)
@@ -128,8 +140,21 @@ class NLPExtractor:
             'food_item': food_item or 'Unknown',
             'adulterant': adulterant or 'Unknown',
             'severity': severity,
+            'nlp_mode': nlp_mode,
             'confidence': min(0.99, confidence)
         }
+
+    def _extract_city_ner(self, text: str) -> str:
+        """Extract city name using NER pipeline, then map to known cities."""
+        try:
+            entities = self.bert_pipelines['ner'](text[:512])
+            for entity in entities:
+                token = str(entity.get('word', '')).strip().lower()
+                if token in self.cities:
+                    return token.title()
+        except Exception as e:
+            logger.warning("[NLPExtractor] NER city extraction failed: %s", e)
+        return None
     
     def _extract_city(self, text: str) -> str:
         """Extract city name using keyword matching (most reliable)."""
@@ -143,7 +168,7 @@ class NLPExtractor:
     def _extract_food_bert(self, text: str) -> Tuple[str, float]:
         """Extract food item using BERT zero-shot classification."""
         try:
-            result = self.bert_pipelines['zero_shot'](
+            result = self.bert_pipelines['classifier'](
                 text[:512],  # Limit to 512 tokens
                 self.foods,
                 multi_class=False
@@ -155,7 +180,7 @@ class NLPExtractor:
                 # Fallback to keyword
                 return self._extract_food_keyword(text.lower()), 0.3
         except Exception as e:
-            print(f"[NLPExtractor] BERT error in food extraction: {e}")
+            logger.warning("[NLPExtractor] BERT error in food extraction: %s", e)
             return self._extract_food_keyword(text.lower()), 0.3
     
     def _extract_food_keyword(self, text: str) -> str:
@@ -168,7 +193,7 @@ class NLPExtractor:
     def _extract_adulterant_bert(self, text: str) -> Tuple[str, float]:
         """Extract adulterant using BERT zero-shot classification."""
         try:
-            result = self.bert_pipelines['zero_shot'](
+            result = self.bert_pipelines['classifier'](
                 text[:512],
                 self.adulterants,
                 multi_class=False
@@ -180,7 +205,7 @@ class NLPExtractor:
                 # Fallback to keyword
                 return self._extract_adulterant_keyword(text.lower()), 0.3
         except Exception as e:
-            print(f"[NLPExtractor] BERT error in adulterant extraction: {e}")
+            logger.warning("[NLPExtractor] BERT error in adulterant extraction: %s", e)
             return self._extract_adulterant_keyword(text.lower()), 0.3
     
     def _extract_adulterant_keyword(self, text: str) -> str:
@@ -217,7 +242,7 @@ class NLPExtractor:
             return max(1, min(5, combined_severity))
         
         except Exception as e:
-            print(f"[NLPExtractor] BERT error in severity estimation: {e}")
+            logger.warning("[NLPExtractor] BERT error in severity estimation: %s", e)
             return self._estimate_severity_keyword(text.lower())
     
     def _estimate_severity_keyword(self, text: str) -> int:
@@ -236,7 +261,7 @@ class NLPExtractor:
             "detergent", "starch", "synthetic", "fillers",
             "chemical", "dye", "coloring", "preservative"
         }
-        severity_low = {"water", "sand", "chalk", "fillers"}
+        severity_low = {"water", "sand", "chalk", "dust", "diluted"}
         
         if any(word in text for word in severity_high):
             return 5
@@ -259,5 +284,6 @@ def extract_entities(text: str) -> Dict:
         'food_item': result['food_item'],
         'adulterant': result['adulterant'],
         'severity': result['severity'],
+        'nlp_mode': result.get('nlp_mode', 'KEYWORD'),
         'nlp_confidence': result['confidence']  # For storing in database
     }

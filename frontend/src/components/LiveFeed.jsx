@@ -72,6 +72,13 @@ export default function LiveFeed({ city, alerts = [] }) {
     return 'var(--teal)';
   };
 
+  const getDisplayScore = (alert) => {
+    if (alert?.risk_score != null) return Number(alert.risk_score) || 0;
+    if (alert?.risk_level === 'HIGH') return 80;
+    if (alert?.risk_level === 'MEDIUM') return 55;
+    return 25;
+  };
+
   return (
     <div
       style={{
@@ -138,7 +145,8 @@ export default function LiveFeed({ city, alerts = [] }) {
           </div>
         ) : (
           displayAlerts.map((alert, idx) => {
-            const riskColor = getRiskColor(alert.risk_score || 0);
+            const displayScore = getDisplayScore(alert);
+            const riskColor = getRiskColor(displayScore);
             return (
               <div
                 key={`${alert.id || idx}`}
@@ -198,6 +206,9 @@ export default function LiveFeed({ city, alerts = [] }) {
                   {/* Time */}
                   <div
                     style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
                       fontFamily: 'var(--font-mono)',
                       fontSize: '9px',
                       color: 'var(--text-4)',
@@ -205,7 +216,8 @@ export default function LiveFeed({ city, alerts = [] }) {
                       textTransform: 'uppercase',
                     }}
                   >
-                    {formatTime(alert.created_at || alert.timestamp)}
+                    <span>{formatTime(alert.created_at || alert.timestamp)}</span>
+                    <span style={{ color: riskColor }}>RISK {Math.round(displayScore)}</span>
                   </div>
                 </div>
               </div>

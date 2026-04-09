@@ -52,6 +52,46 @@ export async function getStats() {
   }
 }
 
+export async function getMlStatus() {
+  try {
+    const response = await client.get('/api/ml-status/');
+    return { data: response.data, error: null };
+  } catch (err) {
+    console.error('getMlStatus error:', err.message);
+    return { data: null, error: err.message || 'Failed to fetch ML status' };
+  }
+}
+
+export async function runPipelineNow() {
+  try {
+    const response = await client.post('/api/run-pipeline/');
+    return { data: response.data, error: null };
+  } catch (err) {
+    console.error('runPipelineNow error:', err.message);
+    return { data: null, error: err.message || 'Failed to run pipeline' };
+  }
+}
+
+export async function getSystemMetrics() {
+  try {
+    const response = await client.get('/api/system-metrics/');
+    return { data: response.data, error: null };
+  } catch (err) {
+    console.error('getSystemMetrics error:', err.message);
+    return { data: null, error: err.message || 'Failed to fetch system metrics' };
+  }
+}
+
+export async function getEvaluationReport() {
+  try {
+    const response = await client.get('/api/evaluation-report/');
+    return { data: response.data, error: null };
+  } catch (err) {
+    console.error('getEvaluationReport error:', err.message);
+    return { data: null, error: err.message || 'Failed to fetch evaluation report' };
+  }
+}
+
 export async function getAlerts(city) {
   try {
     const response = await client.get('/api/alerts/', {

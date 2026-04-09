@@ -13,7 +13,7 @@ application = ProtocolTypeRouter({
     'http': get_asgi_application(),
     'websocket': AuthMiddlewareStack(
         URLRouter([
-            re_path(r'ws/alerts/(?P<city>\w+)/$', consumers.AlertConsumer.as_asgi()),
+            re_path(r'ws/alerts/(?P<city>[\w\-\s]+)/$', consumers.AlertConsumer.as_asgi()),
         ])
     ),
 })

@@ -46,6 +46,14 @@ class Complaint(models.Model):
         ('NEWS', 'News Article'),
         ('CITIZEN', 'Citizen Report'),
     ]
+    DATA_SOURCE_TYPE_CHOICES = [
+        ('REAL', 'Real'),
+        ('SIMULATED', 'Simulated'),
+    ]
+    NLP_MODE_CHOICES = [
+        ('TRANSFORMER', 'Transformer'),
+        ('KEYWORD', 'Keyword'),
+    ]
     
     id = models.AutoField(primary_key=True)
     source = models.CharField(
@@ -72,6 +80,16 @@ class Complaint(models.Model):
         default=0.0,
         help_text="BERT extraction confidence (0.0-1.0)"
     )
+    nlp_mode = models.CharField(
+        max_length=20,
+        choices=NLP_MODE_CHOICES,
+        default='KEYWORD'
+    )
+    data_source_type = models.CharField(
+        max_length=20,
+        choices=DATA_SOURCE_TYPE_CHOICES,
+        default='SIMULATED'
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -93,6 +111,15 @@ class RiskScore(models.Model):
     """ML-computed risk score for a food item in a city for a specific month."""
     
     id = models.AutoField(primary_key=True)
+    DATA_SOURCE_TYPE_CHOICES = [
+        ('REAL', 'Real'),
+        ('SIMULATED', 'Simulated'),
+    ]
+    SCORE_SOURCE_CHOICES = [
+        ('ML+RULE', 'ML + Rule Hybrid'),
+        ('RULE_ONLY', 'Rule Only'),
+    ]
+
     city = models.CharField(max_length=100, db_index=True)
     food_item = models.CharField(max_length=100)
     food_category = models.ForeignKey(
@@ -120,6 +147,16 @@ class RiskScore(models.Model):
         default=dict,
         blank=True,
         help_text="SHAP feature importance explanation"
+    )
+    score_source = models.CharField(
+        max_length=20,
+        choices=SCORE_SOURCE_CHOICES,
+        default='RULE_ONLY'
+    )
+    data_source_type = models.CharField(
+        max_length=20,
+        choices=DATA_SOURCE_TYPE_CHOICES,
+        default='SIMULATED'
     )
     last_updated = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(default=timezone.now, help_text="Creation timestamp")
@@ -151,6 +188,10 @@ class LiveAlert(models.Model):
         ('MEDIUM', 'Medium'),
         ('LOW', 'Low'),
     ]
+    DATA_SOURCE_TYPE_CHOICES = [
+        ('REAL', 'Real'),
+        ('SIMULATED', 'Simulated'),
+    ]
     
     id = models.AutoField(primary_key=True)
     message = models.TextField()
@@ -164,6 +205,11 @@ class LiveAlert(models.Model):
     evidence = models.JSONField(
         default=list,
         help_text="List of evidence items supporting the alert"
+    )
+    data_source_type = models.CharField(
+        max_length=20,
+        choices=DATA_SOURCE_TYPE_CHOICES,
+        default='SIMULATED'
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     

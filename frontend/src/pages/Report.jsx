@@ -351,29 +351,36 @@ export default function Report() {
             >
               Severity Level
             </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {[1, 2, 3, 4, 5].map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setFormData((prev) => ({ ...prev, severity: level }))}
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    background: formData.severity === level ? 'var(--red-dim)' : 'var(--bg-3)',
-                    border: formData.severity === level ? '1px solid var(--red)' : '1px solid var(--line-2)',
-                    color: formData.severity === level ? 'var(--red)' : 'var(--text-3)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    transition: 'all 150ms',
-                    borderRadius: 0,
-                  }}
-                >
-                  {level}
-                </button>
-              ))}
-            </div>
+            <select
+              name="severity"
+              value={formData.severity}
+              onChange={handleChange}
+              style={{
+                width: '100%',
+                background: 'var(--bg-3)',
+                border: '1px solid var(--line-2)',
+                borderRadius: 0,
+                color: 'var(--text)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                padding: '12px 14px',
+                outline: 'none',
+                cursor: 'pointer',
+                appearance: 'none',
+                backgroundImage:
+                  "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233A3A52' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e\")",
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'right 8px center',
+                backgroundSize: '20px',
+                paddingRight: '32px',
+              }}
+            >
+              <option value={1}>1 - Low</option>
+              <option value={2}>2 - Mild</option>
+              <option value={3}>3 - Moderate</option>
+              <option value={4}>4 - High</option>
+              <option value={5}>5 - Critical</option>
+            </select>
           </div>
 
           {/* Description */}

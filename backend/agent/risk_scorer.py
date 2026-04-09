@@ -1,12 +1,67 @@
-import os
 import pickle
 import json
-from datetime import datetime, timedelta
-from typing import Dict, Tuple, Optional
+import logging
+import os
+from datetime import timedelta
+from pathlib import Path
+from typing import Dict
+
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+
 import numpy as np
 from django.utils import timezone
-from django.db.models import Avg, Count
-from core.models import Complaint, RiskScore
+from django.db.models import Avg
+from core.models import Complaint
+from ml.shap_explainer import format_shap_explanation
+
+
+MODEL_DIR = Path(__file__).resolve().parent.parent / 'ml' / 'saved_models'
+logger = logging.getLogger(__name__)
+REQUIRED_ML_ARTIFACTS = {
+    'risk_model': ['model.pkl', 'risk_model.pkl'],
+    'scaler': ['scaler.pkl', 'feature_scaler.pkl'],
+    'shap_explainer': ['shap_explainer.pkl'],
+}
+FEATURE_ORDER = [
+    'complaint_count',
+    'severity_avg',
+    'season_flag',
+    'source_weight',
+    'recency_weight',
+    'trend_score',
+    'adulterant_count',
+]
+
+
+def get_ml_runtime_status() -> Dict:
+    """Return ML runtime availability status for transparency endpoints."""
+    model_loaded = any((MODEL_DIR / name).exists() for name in REQUIRED_ML_ARTIFACTS['risk_model'])
+    scaler_loaded = any((MODEL_DIR / name).exists() for name in REQUIRED_ML_ARTIFACTS['scaler'])
+    shap_enabled = any((MODEL_DIR / name).exists() for name in REQUIRED_ML_ARTIFACTS['shap_explainer'])
+    ml_enabled = bool(model_loaded and scaler_loaded)
+    missing_artifacts = []
+    if not model_loaded:
+        missing_artifacts.extend(REQUIRED_ML_ARTIFACTS['risk_model'])
+    if not scaler_loaded:
+        missing_artifacts.extend(REQUIRED_ML_ARTIFACTS['scaler'])
+    if not shap_enabled:
+        missing_artifacts.extend(REQUIRED_ML_ARTIFACTS['shap_explainer'])
+
+    if missing_artifacts:
+        logger.error(
+            "ML artifacts missing under %s: %s",
+            MODEL_DIR,
+            missing_artifacts,
+        )
+
+    return {
+        'ml_enabled': ml_enabled,
+        'model_loaded': model_loaded and scaler_loaded,
+        'shap_enabled': shap_enabled,
+        'mode': 'ML' if ml_enabled else 'FALLBACK',
+        'missing_artifacts': missing_artifacts,
+    }
 
 
 class RiskScorerAgent:
@@ -23,87 +78,83 @@ class RiskScorerAgent:
         self.shap_explainer = self._load_shap_explainer()
         self.metadata = self._load_metadata()
         self.festival_months = {'10', '11', '01', '04'}  # Oct, Nov, Jan, Apr
-        self.feature_names = None
-        if self.metadata:
-            self.feature_names = self.metadata.get('feature_names')
+        self.feature_names = self.metadata.get('feature_names') if self.metadata else FEATURE_ORDER
+        self.uses_ml_model = bool(self.model and self.scaler)
+
+        if self.uses_ml_model:
+            logger.info("ML model loaded successfully")
+            logger.info("[RiskScorer] Using ML model from %s", MODEL_DIR)
+        else:
+            logger.warning("[RiskScorer] ML artifacts missing in %s", MODEL_DIR)
+            logger.warning("Fallback scoring used")
     
     def _load_model(self):
         """Load XGBoost model from disk, return None if not available."""
+        candidate_paths = [
+            MODEL_DIR / 'model.pkl',
+            MODEL_DIR / 'risk_model.pkl',
+        ]
         try:
-            model_path = os.path.join(
-                os.path.dirname(__file__),
-                '..',
-                'ml',
-                'saved_models',
-                'risk_model.pkl'
-            )
-            if os.path.exists(model_path):
+            for model_path in candidate_paths:
+                if not model_path.exists():
+                    continue
                 with open(model_path, 'rb') as f:
                     model = pickle.load(f)
-                print("[RiskScorer] [OK] Loaded XGBoost model")
+                logger.info("[RiskScorer] Loaded XGBoost model from %s", model_path)
                 return model
+            logger.warning("[RiskScorer] Missing model files: %s", candidate_paths)
         except Exception as e:
-            print(f"[RiskScorer] Could not load model: {e}")
+            logger.warning("[RiskScorer] Could not load model: %s", e)
         
         return None
     
     def _load_scaler(self):
         """Load feature scaler from disk."""
+        candidate_paths = [
+            MODEL_DIR / 'scaler.pkl',
+            MODEL_DIR / 'feature_scaler.pkl',
+        ]
         try:
-            scaler_path = os.path.join(
-                os.path.dirname(__file__),
-                '..',
-                'ml',
-                'saved_models',
-                'feature_scaler.pkl'
-            )
-            if os.path.exists(scaler_path):
+            for scaler_path in candidate_paths:
+                if not scaler_path.exists():
+                    continue
                 with open(scaler_path, 'rb') as f:
                     scaler = pickle.load(f)
-                print("[RiskScorer] [OK] Loaded feature scaler")
+                logger.info("[RiskScorer] Loaded feature scaler from %s", scaler_path)
                 return scaler
+            logger.warning("[RiskScorer] Missing scaler files: %s", candidate_paths)
         except Exception as e:
-            print(f"[RiskScorer] Could not load scaler: {e}")
+            logger.warning("[RiskScorer] Could not load scaler: %s", e)
         
         return None
     
     def _load_shap_explainer(self):
         """Load SHAP explainer from disk."""
         try:
-            explainer_path = os.path.join(
-                os.path.dirname(__file__),
-                '..',
-                'ml',
-                'saved_models',
-                'shap_explainer.pkl'
-            )
-            if os.path.exists(explainer_path):
+            explainer_path = MODEL_DIR / 'shap_explainer.pkl'
+            if explainer_path.exists():
                 with open(explainer_path, 'rb') as f:
                     explainer = pickle.load(f)
-                print("[RiskScorer] [OK] Loaded SHAP explainer")
+                logger.info("[RiskScorer] Loaded SHAP explainer")
                 return explainer
+            logger.warning("[RiskScorer] SHAP explainer not found: %s", explainer_path)
         except Exception as e:
-            print(f"[RiskScorer] Could not load SHAP explainer: {e}")
+            logger.warning("[RiskScorer] Could not load SHAP explainer: %s", e)
         
         return None
     
     def _load_metadata(self):
         """Load model metadata."""
         try:
-            metadata_path = os.path.join(
-                os.path.dirname(__file__),
-                '..',
-                'ml',
-                'saved_models',
-                'model_metadata.json'
-            )
-            if os.path.exists(metadata_path):
-                with open(metadata_path, 'r') as f:
+            metadata_path = MODEL_DIR / 'model_metadata.json'
+            if metadata_path.exists():
+                with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                print("[RiskScorer] [OK] Loaded model metadata")
+                logger.info("[RiskScorer] Loaded model metadata")
                 return metadata
+            logger.warning("[RiskScorer] Missing metadata file: %s", metadata_path)
         except Exception as e:
-            print(f"[RiskScorer] Could not load metadata: {e}")
+            logger.warning("[RiskScorer] Could not load metadata: %s", e)
         
         return None
     
@@ -131,38 +182,35 @@ class RiskScorerAgent:
             }
             
             # If model is available, use it
-            if self.model and self.scaler and self.feature_names:
-                # Scale features
-                features_array = np.array([[
-                    features['complaint_count'],
-                    features['severity_avg'],
-                    features['season_flag'],
-                    features['source_weight'],
-                    features['recency_weight'],
-                    features.get('trend_score', 0.5),
-                    features.get('adulterant_count', 1)
-                ]])
-                
+            if self.uses_ml_model:
+                features_array = np.array([[features[name] for name in FEATURE_ORDER]], dtype=float)
                 features_scaled = self.scaler.transform(features_array)
-                
-                # Predict
-                score = float(self.model.predict(features_scaled)[0])
-                score = max(0, min(100, score))
+
+                ml_score = float(self.model.predict(features_scaled)[0])
+                ml_score = max(0, min(100, ml_score))
+                rule_score = self._weighted_formula(features)
+                score = max(0, min(100, (0.7 * ml_score) + (0.3 * rule_score)))
                 
                 # Compute SHAP values if explainer available
                 if self.shap_explainer:
                     shap_values = self.shap_explainer.shap_values(features_scaled)
-                    shap_explanation = self._format_shap_explanation(
+                    shap_explanation = format_shap_explanation(
                         shap_values[0], 
                         self.feature_names, 
                         features_array[0]
                     )
                     result['shap_explanation'] = shap_explanation
+                else:
+                    result['shap_explanation'] = self._build_fallback_explanation(features)
                 
                 # Confidence score
                 confidence = self._compute_confidence(score, features)
                 result['confidence'] = confidence
-                result['data_source'] = 'ml_model'
+                result['data_source'] = 'ml_blended'
+                result['score_source'] = 'ML+RULE'
+                result['ml_enabled'] = True
+                logger.info('[RiskScorer] Using blended ML + rule scoring')
+                logger.info('ML scoring used')
                 
             else:
                 # Use weighted formula
@@ -170,14 +218,24 @@ class RiskScorerAgent:
                 confidence = self._compute_confidence(score, features)
                 result['confidence'] = confidence
                 result['data_source'] = 'weighted_formula'
+                result['score_source'] = 'RULE_ONLY'
+                result['ml_enabled'] = False
+                result['shap_explanation'] = self._build_fallback_explanation(features)
+                logger.warning('Fallback scoring used')
             
             result['risk_score'] = score
             
-            print(f"[RiskScorer] {food_item} in {city}: {score:.1f} (confidence: {result['confidence']:.2f})")
+            logger.info(
+                "[RiskScorer] %s in %s: %.1f (confidence: %.2f)",
+                food_item,
+                city,
+                score,
+                result['confidence'],
+            )
             return result
         
         except Exception as e:
-            print(f"[RiskScorer] Error calculating score: {e}")
+            logger.exception("[RiskScorer] Error calculating score: %s", e)
             return {
                 'risk_score': 0.0,
                 'confidence': 0.0,
@@ -185,27 +243,24 @@ class RiskScorerAgent:
                 'shap_explanation': None,
                 'features': {}
             }
-    
-    def _format_shap_explanation(self, shap_values: np.ndarray, feature_names: list, features: np.ndarray) -> dict:
-        """Format SHAP values into human-readable explanation."""
-        explanation = {
-            'base_value': float(np.mean(np.abs(shap_values))),
-            'features': []
+
+    def _build_fallback_explanation(self, features: Dict) -> Dict:
+        """Build structured explanation when SHAP explainer is unavailable."""
+        ranked = sorted(features.items(), key=lambda item: abs(float(item[1])), reverse=True)
+        top_factors = [
+            {
+                'name': name,
+                'value': float(value),
+                'impact': 'increases' if float(value) >= 0 else 'decreases',
+            }
+            for name, value in ranked[:3]
+        ]
+        return {
+            'top_factors': top_factors,
+            'reasoning': 'Fallback explanation generated from rule-based feature magnitudes because SHAP explainer is unavailable.',
+            'confidence_score': 0.6,
+            'model_version': self.metadata.get('version', 'fallback') if self.metadata else 'fallback',
         }
-        
-        # Sort by absolute SHAP value
-        indices = np.argsort(np.abs(shap_values))[::-1][:5]  # Top 5 features
-        
-        for idx in indices:
-            if idx < len(feature_names):
-                explanation['features'].append({
-                    'name': feature_names[idx],
-                    'value': float(features[idx]),
-                    'shap_value': float(shap_values[idx]),
-                    'impact': 'increases' if shap_values[idx] > 0 else 'decreases'
-                })
-        
-        return explanation
     
     def _compute_confidence(self, score: float, features: Dict) -> float:
         """
@@ -324,15 +379,7 @@ def calculate_risk_score(city: str, food_item: str) -> float:
     scorer = RiskScorerAgent()
     features = scorer._extract_features(city, food_item)
 
-    feature_vector = [
-        features['complaint_count'],
-        features['severity_avg'],
-        features['season_flag'],
-        features['source_weight'],
-        features['recency_weight'],
-        features.get('trend_score', 0.5),
-        features.get('adulterant_count', 1),
-    ]
+    feature_vector = [features[name] for name in FEATURE_ORDER]
 
     if scorer.model and scorer.scaler:
         features_scaled = scorer.scaler.transform([feature_vector])

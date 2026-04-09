@@ -15,6 +15,8 @@ class ComplaintSerializer(serializers.ModelSerializer):
             'food_item',
             'adulterant',
             'severity',
+            'data_source_type',
+            'nlp_mode',
             'raw_text',
             'created_at',
         ]
@@ -40,6 +42,8 @@ class RiskScoreSerializer(serializers.ModelSerializer):
             'complaint_count',
             'severity_avg',
             'month',
+            'score_source',
+            'data_source_type',
             'shap_explanation',
             'last_updated',
         ]
@@ -67,6 +71,8 @@ class LiveAlertSerializer(serializers.ModelSerializer):
             'city',
             'food_item',
             'risk_level',
+            'risk_score',
+            'data_source_type',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
